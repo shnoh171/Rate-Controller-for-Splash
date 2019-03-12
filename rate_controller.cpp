@@ -16,47 +16,19 @@ struct example_data
     int data;
 };
 
-long TimePointToLong(stime_t tp);
-stime_t LongToTimePoint(long cnt);
 example_data CreateDataItem(int data);
-template <typename data0>
-data0 CreateExtrapolationCommand(stime_t ec_birth_mark);
 
 example_data CreateDataItem(int data)
 {
     example_data d;
-    d.birth_mark = TimePointToLong(std::chrono::steady_clock::now());
+
+    auto epoch = (std::chrono::steady_clock::now()).time_since_epoch();
+    auto val = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
+    d.birth_mark = val.count();
     d.extra_signal = false;
     d.data = data;
 
     return d;
-}
-
-template <typename data0>
-data0 CreateExtrapolationCommand(stime_t ec_birth_mark)
-{
-    data0 d;
-    d.birth_mark = TimePointToLong(ec_birth_mark);
-    d.extra_signal = true;
-    
-    return d;
-}
-
-long TimePointToLong(stime_t tp) 
-{
-    auto epoch = tp.time_since_epoch();
-    auto val = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
-    long ret = val.count();
-
-    return ret;
-}
-
-stime_t LongToTimePoint(long cnt) 
-{
-    std::chrono::milliseconds dur(cnt);
-    std::chrono::time_point<std::chrono::steady_clock> ret(dur);
-    
-    return ret;
 }
 
 template <typename data0>
@@ -70,15 +42,49 @@ class RateController
         stime_t init_time;
         stime_t prev_birth_mark;
 
+        long TimePointToLong(stime_t tp);
+        data0 CreateExtrapolationCommand(stime_t ec_birth_mark);
+        stime_t LongToTimePoint(long cnt);
+
         bool IsOutputQueueFull();
         void GenerateOutput();
         void SendDataItem(data0 d);
         void SendExtrapolationCommand(stime_t ec_birth_mark);
+
     public:
         RateController(int rate_constraint, int freshness_constraint); // (Hz, ms)
         void StartRateControl(bool generate_and_start);
         void InsertDataItem(data0 d);
 };
+
+template <typename data0>
+long RateController<data0>::TimePointToLong(stime_t tp) 
+{
+    auto epoch = tp.time_since_epoch();
+    auto val = std::chrono::duration_cast<std::chrono::milliseconds>(epoch);
+    long ret = val.count();
+
+    return ret;
+}
+
+template <typename data0>
+data0 RateController<data0>::CreateExtrapolationCommand(stime_t ec_birth_mark)
+{
+    data0 d;
+    d.birth_mark = TimePointToLong(ec_birth_mark);
+    d.extra_signal = true;
+    
+    return d;
+}
+
+template <typename data0>
+stime_t RateController<data0>::LongToTimePoint(long cnt) 
+{
+    std::chrono::milliseconds dur(cnt);
+    std::chrono::time_point<std::chrono::steady_clock> ret(dur);
+    
+    return ret;
+}
 
 template <typename data0>
 bool RateController<data0>::IsOutputQueueFull()
@@ -109,7 +115,7 @@ void RateController<data0>::GenerateOutput()
 
     if (extrapolation_flag) {
         stime_t ec_birth_mark = prev_birth_mark + std::chrono::milliseconds(1000/rate);
-        d = CreateExtrapolationCommand<data0>(ec_birth_mark);
+        d = CreateExtrapolationCommand(ec_birth_mark);
     }
     
     SendDataItem(d);
